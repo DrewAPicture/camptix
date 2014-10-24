@@ -69,6 +69,7 @@ class CampTix_Addon_Shortcodes extends CampTix_Addon {
 			'posts_per_page' => 10000,
 			'tickets' => false,
 			'columns' => 3,
+			'questions' => '',
 		), $attr, 'camptix_attendees' );
 
 		$camptix_options = $camptix->get_options();
@@ -114,6 +115,8 @@ class CampTix_Addon_Shortcodes extends CampTix_Addon {
 
 		$attr['posts_per_page'] = absint( $attr['posts_per_page'] );
 
+		$questions = $this->get_questions_from_titles( $attr['questions'] );
+
 		$paged = 0;
 		$printed = 0;
 		do_action( 'camptix_attendees_shortcode_init' );
@@ -146,6 +149,7 @@ class CampTix_Addon_Shortcodes extends CampTix_Addon {
 						$camptix->filter_post_meta = $camptix->prepare_metadata_for( $attendees );
 
 						foreach ( $attendees as $attendee_id ) {
+							$attendee_answers = get_post_meta( $attendee_id, 'tix_questions', true );
 							if ( $printed >= $attr['posts_per_page'] )
 								break;
 
@@ -165,7 +169,13 @@ class CampTix_Addon_Shortcodes extends CampTix_Addon {
 							<div class="tix-field tix-attendee-name">
 								<?php echo $GLOBALS['camptix']->format_name_string( '<span class="tix-first">%first%</span> <span class="tix-last">%last%</span>', esc_html( $first ), esc_html( $last ) ); ?>
 							</div>
-
+							<?php foreach ( $questions as $question ) :
+								if ( ! empty ( $attendee_answers[ $question->ID ] ) ) : ?>
+									<div class="tix-field tix-<?php echo esc_attr( $question->post_name ); ?>">
+										<?php echo esc_html( $attendee_answers[ $question->ID ] ); ?>
+									</div>
+								<?php endif; ?>
+							<?php endforeach; ?>
 							<?php
 							do_action( 'camptix_attendees_shortcode_item', $attendee_id );
 							echo '</li>';
@@ -190,6 +200,34 @@ class CampTix_Addon_Shortcodes extends CampTix_Addon {
 		ob_end_clean();
 		set_transient( $transient_key, array( 'content' => $content, 'time' => time() ), $cache_time );
 		return $content;
+	}
+
+	/**
+	 * Get full `tix_question` posts from their corresponding titles
+	 *
+	 * @param string $titles Pipe-separated list of question titles.
+	 *
+	 * @return array Array of question post objects matched to the given titles.
+	 */
+	protected function get_questions_from_titles( $titles ) {
+		global $camptix;
+
+		if ( empty( $titles ) ) {
+			return array();
+		}
+
+		$titles        = array_map( 'sanitize_title', explode( '|', $titles ) );
+		$all_questions = $camptix->get_all_questions();
+
+		$questions = array();
+
+		foreach ( $titles as $title ) {
+			$matched = wp_list_filter( $all_questions, array( 'post_name' => $title ) );
+			if ( ! empty( $matched ) ) {
+				$questions = array_merge( $questions, $matched );
+			}
+		}
+		return $questions;
 	}
 
 	/**
